@@ -52,9 +52,10 @@
               (when-let* ((presets (assoc-default type-key json-data)))
                 (dolist (preset presets)
                   (when-let* ((name (assoc-default "name" preset)))
-                    (let ((entry-name (format "%s / %s" type-name name))
+                    (let ((entry-name (format "%s/%s" type-name name))
                           (entry-pos (save-excursion
                                        (goto-char (point-min))
+                                       (search-forward type-key nil t)
                                        (search-forward (format "\"name\": \"%s\"" name) nil t))))
                       (when entry-pos
                         (push (cons entry-name entry-pos) index-alist)))))))))))
@@ -85,11 +86,13 @@
               (when-let* ((presets (assoc-default type-key json-data)))
                 (dolist (preset presets)
                   (when-let* ((name (assoc-default "name" preset)))
-                    (let ((entry-pos (save-excursion
+                    (let ((entry-name (format "%s/%s" type-name name))
+                          (entry-pos (save-excursion
                                        (goto-char (point-min))
+                                       (search-forward type-key nil t)
                                        (search-forward (format "\"name\": \"%s\"" name) nil t))))
                       (when entry-pos
-                        (push (cons name entry-pos) group-alist))))))
+                        (push (cons entry-name entry-pos) group-alist))))))
               (when group-alist
                 (push (cons type-name (nreverse group-alist)) index-alist)))))))
     (nreverse index-alist)))
