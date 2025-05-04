@@ -29,7 +29,7 @@
 (require 'treesit)
 
 
-(defconst cmakepresets-type-alist
+(defconst cp-type-alist
   '(("configurePresets" . "Configure")
     ("buildPresets" . "Build")
     ("testPresets" . "Test")
@@ -38,7 +38,7 @@
   "Mapping from JSON keys to preset types.")
 
 
-(defun cmakepresets-presets-query ()
+(defun cp-presets-query ()
   "Return the Treesit query for capturing all presets in the JSON file.
 
 This query matches top-level keys (e.g., \"configurePresets\",
@@ -55,20 +55,20 @@ object should have key-value pairs, including `\"name\"`."
                     (string (string_content)))) @presets))))
 
 
-(defun cmakepresets-get-preset-nodes ()
+(defun cp-get-preset-nodes ()
   "Capture and return Treesit nodes representing presets in the current buffer."
   (let*((root (treesit-buffer-root-node))
-        (query (cmakepresets-presets-query)))
+        (query (cp-presets-query)))
     (treesit-query-capture root query nil nil t)))
 
 
-(defun cmakepresets-node-is-name-p (node)
+(defun cp-node-is-name-p (node)
   "Return non-nil if NODE represents a key-value pair where `key` is \"name\"."
   (let ((key (treesit-node-child-by-field-name node "key")))
     (string-equal (treesit-node-text key t) "\"name\"")))
 
 
-(defun cmakepresets-get-preset-node-name (preset-node)
+(defun cp-get-preset-node-name (preset-node)
   "Return the name of PRESET-NODE, or \"<unknown name>\" if not found.
 
 The PRESET-NODE is a treesitter node representing a preset in the json
@@ -76,18 +76,18 @@ file. This treesitter node has children which are pairs (the key-value
 pairs in the json file). To get the name of the preset, we need to find
 which child node of PRESET-NODE is the one whose `key' field is
 \"name\", and then we return the `value' field of that chield."
-  (if-let* ((name-pair (seq-find #'cmakepresets-node-is-name-p
+  (if-let* ((name-pair (seq-find #'cp-node-is-name-p
                                  (treesit-node-children preset-node t))))
       (treesit-node-text (treesit-node-child-by-field-name name-pair "value") t)
     "<unknown name>"))
 
 
-(defun cmakepresets-get-preset-node-start-pos (preset-node)
+(defun cp-get-preset-node-start-pos (preset-node)
   "Get the start position of the PRESET-NODE."
   (treesit-node-start preset-node))
 
 
-(defun cmakepresets-get-preset-node-type (preset-node)
+(defun cp-get-preset-node-type (preset-node)
   "Return the type of PRESET-NODE.
 
 The type is one of \"Configure\", \"Build\", \"Test\", \"Package\", or
@@ -95,46 +95,50 @@ The type is one of \"Configure\", \"Build\", \"Test\", \"Package\", or
   (let* ((parent (treesit-node-parent (treesit-node-parent preset-node)))
          (parent-key (treesit-node-child-by-field-name parent "key"))
          (parent-type (treesit-node-text (treesit-node-child parent-key 0 t) t)))
-    (alist-get parent-type cmakepresets-type-alist nil nil 'equal)))
+    (alist-get parent-type cp-type-alist nil nil 'equal)))
 
 
-(defun cmakepresets-imenu-create-index-with-groups ()
+(defun cp-imenu-create-index-with-groups ()
   "Create imenu index for CMake presets grouped by preset type.
 
 Each CMake preset is included under its type (e.g., \"Configure\").
 Entries have the format \"Type/Name\" pointing to the start position of
 the preset."
-  (let ((preset-nodes (cmakepresets-get-preset-nodes))
+  (let ((preset-nodes (cp-get-preset-nodes))
         (index-alist '()))
     (dolist (preset-node (nreverse preset-nodes))
-      (let* ((preset-name (cmakepresets-get-preset-node-name preset-node))
-             (preset-start (cmakepresets-get-preset-node-start-pos preset-node))
-             (preset-type (cmakepresets-get-preset-node-type preset-node))
+      (let* ((preset-name (cp-get-preset-node-name preset-node))
+             (preset-start (cp-get-preset-node-start-pos preset-node))
+             (preset-type (cp-get-preset-node-type preset-node))
              (full-name (format "%s/%s" preset-type preset-name)))
         (push (cons full-name preset-start)
               (alist-get preset-type index-alist))))
     index-alist))
 
 
-(defun cmakepresets-setup-imenu ()
+(defun cp-setup-imenu ()
   "Set up imenu for CMake presets files."
   (setq-local imenu-create-index-function
-              #'cmakepresets-imenu-create-index-with-groups))
+              #'cp-imenu-create-index-with-groups))
 
 
 ;;;###autoload
-(define-derived-mode cmakepresets-mode json-ts-mode "CMakePresets"
+(define-derived-mode cp-mode json-ts-mode "CMakePresets"
   "Major mode for editing CMakePresets.json files.
 
 This mode inherits from `json-mode` and provides additional functionality
 specific to CMake presets, such as imenu support."
-  (cmakepresets-setup-imenu))
+  (cp-setup-imenu))
 
 
 ;;;###autoload
-(add-to-list 'auto-mode-alist '("CMakePresets\\.json\\'" . cmakepresets-mode))
-(add-to-list 'auto-mode-alist '("CMakeUserPresets\\.json\\'" . cmakepresets-mode))
+(add-to-list 'auto-mode-alist '("CMakePresets\\.json\\'" . cp-mode))
+(add-to-list 'auto-mode-alist '("CMakeUserPresets\\.json\\'" . cp-mode))
 
 
 (provide 'cmakepresets-mode)
 ;;; cmakepresets-mode.el ends here
+
+;; Local Variables:
+;; read-symbol-shorthands: (("cp-" . "cmakepresets-"))
+;; End:
