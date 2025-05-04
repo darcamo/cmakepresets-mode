@@ -4,7 +4,6 @@
 
 ;; Author: Moreira <AUTH\moreirad@lx-3117035b368e>
 ;; Version: 0.1
-;; Package-Requires: ((json "1.5"))
 ;; Keywords: c c++ cmake languages tools
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -27,82 +26,100 @@
 
 ;;; Code:
 
-(require 'json)
+(require 'treesit)
 
-(defun cmakepresets-imenu-create-index ()
-  "Create an imenu index for CMake presets files."
-  (let ((json-object-type 'alist)
-        (json-array-type 'list)
-        (json-key-type 'string)
-        (index-alist '())
-        (preset-types '(("configurePresets" . "Configure")
-                        ("buildPresets" . "Build")
-                        ("testPresets" . "Test")
-                        ("packagePresets" . "Package")
-                        ("workflowPresets" . "Workflow"))))
-    (save-excursion
-      (goto-char (point-min))
-      (let ((json-data (condition-case nil
-                           (json-read)
-                         (error nil))))
-        (when (and json-data (listp json-data))
-          (dolist (preset-type preset-types)
-            (let ((type-key (car preset-type))
-                  (type-name (cdr preset-type)))
-              (when-let* ((presets (assoc-default type-key json-data)))
-                (dolist (preset presets)
-                  (when-let* ((name (assoc-default "name" preset)))
-                    (let ((entry-name (format "%s/%s" type-name name))
-                          (entry-pos (save-excursion
-                                       (goto-char (point-min))
-                                       (search-forward type-key nil t)
-                                       (search-forward (format "\"name\": \"%s\"" name) nil t))))
-                      (when entry-pos
-                        (push (cons entry-name entry-pos) index-alist)))))))))))
-    (nreverse index-alist)))
+
+(defconst cmakepresets-type-alist
+  '(("configurePresets" . "Configure")
+    ("buildPresets" . "Build")
+    ("testPresets" . "Test")
+    ("packagePresets" . "Package")
+    ("workflowPresets" . "Workflow"))
+  "Mapping from JSON keys to preset types.")
+
+
+(defun cmakepresets-presets-query ()
+  "Return the Treesit query for capturing all presets in the JSON file.
+
+This query matches top-level keys (e.g., \"configurePresets\",
+\"buildPresets\") that contain an array of preset objects. Each preset
+object should have key-value pairs, including `\"name\"`."
+  '((pair key:(string (string_content))
+          ;; Since for a given type we have an array of presets, then the value
+          ;; field of the presets is an array
+          value: (array
+                  ;; A preset is an object containing one or more pairs, where
+                  ;; each pair in treesitter is a "key-value" pair in the JSON
+                  (object
+                   (pair
+                    (string (string_content)))) @presets))))
+
+
+(defun cmakepresets-get-preset-nodes ()
+  "Capture and return Treesit nodes representing presets in the current buffer."
+  (let*((root (treesit-buffer-root-node))
+        (query (cmakepresets-presets-query)))
+    (treesit-query-capture root query nil nil t)))
+
+
+(defun cmakepresets-node-is-name-p (node)
+  "Return non-nil if NODE represents a key-value pair where `key` is \"name\"."
+  (let ((key (treesit-node-child-by-field-name node "key")))
+    (string-equal (treesit-node-text key t) "\"name\"")))
+
+
+(defun cmakepresets-get-preset-node-name (preset-node)
+  "Return the name of PRESET-NODE, or \"<unknown name>\" if not found.
+
+The PRESET-NODE is a treesitter node representing a preset in the json
+file. This treesitter node has children which are pairs (the key-value
+pairs in the json file). To get the name of the preset, we need to find
+which child node of PRESET-NODE is the one whose `key' field is
+\"name\", and then we return the `value' field of that chield."
+  (if-let* ((name-pair (seq-find #'cmakepresets-node-is-name-p
+                                 (treesit-node-children preset-node t))))
+      (treesit-node-text (treesit-node-child-by-field-name name-pair "value") t)
+    "<unknown name>"))
+
+
+(defun cmakepresets-get-preset-node-start-pos (preset-node)
+  "Get the start position of the PRESET-NODE."
+  (treesit-node-start preset-node))
+
+
+(defun cmakepresets-get-preset-node-type (preset-node)
+  "Return the type of PRESET-NODE.
+
+The type is one of \"Configure\", \"Build\", \"Test\", \"Package\", or
+\"Workflow\". The type is determined by the parent of the preset node."
+  (let* ((parent (treesit-node-parent (treesit-node-parent preset-node)))
+         (parent-key (treesit-node-child-by-field-name parent "key"))
+         (parent-type (treesit-node-text (treesit-node-child parent-key 0 t) t)))
+    (alist-get parent-type cmakepresets-type-alist nil nil 'equal)))
 
 
 (defun cmakepresets-imenu-create-index-with-groups ()
-  "Create an imenu index for CMake presets files with Consult groups."
-  (let ((json-object-type 'alist)
-        (json-array-type 'list)
-        (json-key-type 'string)
-        (index-alist '())
-        (preset-types '(("configurePresets" . "Configure")
-                        ("buildPresets" . "Build")
-                        ("testPresets" . "Test")
-                        ("packagePresets" . "Package")
-                        ("workflowPresets" . "Workflow"))))
-    (save-excursion
-      (goto-char (point-min))
-      (let ((json-data (condition-case nil
-                           (json-read)
-                         (error nil))))
-        (when (and json-data (listp json-data))
-          (dolist (preset-type preset-types)
-            (let ((type-key (car preset-type))
-                  (type-name (cdr preset-type))
-                  (group-alist '()))
-              (when-let* ((presets (assoc-default type-key json-data)))
-                (dolist (preset presets)
-                  (when-let* ((name (assoc-default "name" preset)))
-                    (let ((entry-name (format "%s/%s" type-name name))
-                          (entry-pos (save-excursion
-                                       (goto-char (point-min))
-                                       (search-forward type-key nil t)
-                                       (search-forward (format "\"name\": \"%s\"" name) nil t))))
-                      (when entry-pos
-                        (push (cons entry-name entry-pos) group-alist))))))
-              (when group-alist
-                (push (cons type-name (nreverse group-alist)) index-alist)))))))
-    (nreverse index-alist)))
+  "Create imenu index for CMake presets grouped by preset type.
+
+Each CMake preset is included under its type (e.g., \"Configure\").
+Entries have the format \"Type/Name\" pointing to the start position of
+the preset."
+  (let ((preset-nodes (cmakepresets-get-preset-nodes))
+        (index-alist '()))
+    (dolist (preset-node (nreverse preset-nodes))
+      (let* ((preset-name (cmakepresets-get-preset-node-name preset-node))
+             (preset-start (cmakepresets-get-preset-node-start-pos preset-node))
+             (preset-type (cmakepresets-get-preset-node-type preset-node))
+             (full-name (format "%s/%s" preset-type preset-name)))
+        (push (cons full-name preset-start)
+              (alist-get preset-type index-alist))))
+    index-alist))
 
 
 (defun cmakepresets-setup-imenu ()
   "Set up imenu for CMake presets files."
-  ;; (setq-local imenu-create-index-function #'cmakepresets-imenu-create-index)
-  (setq-local imenu-create-index-function #'cmakepresets-imenu-create-index-with-groups)
-  )
+  (setq-local imenu-create-index-function
+              #'cmakepresets-imenu-create-index-with-groups))
 
 
 ;;;###autoload
