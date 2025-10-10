@@ -58,9 +58,11 @@ seen by CMake."
 
 
 (defun cp-mode-setup-completions ()
-  "Setup `${<some-words>}` completions for my major mode."
-  (add-hook 'completion-at-point-functions #'cp-mode-completions-at-point-for-macros nil t)
-  (add-hook 'completion-at-point-functions #'cp-mode-completions-at-point-for-env-variables nil t)
+  "Setup the completions for `cmakepresets-mode'."
+  ;; The -10 value is to give it more precedence over eglot (in case you use
+  ;; it), since otherwise they would not be called.
+  (add-hook 'completion-at-point-functions #'cp-mode-completions-at-point-for-macros -10 t)
+  (add-hook 'completion-at-point-functions #'cp-mode-completions-at-point-for-env-variables -10 t)
   )
 
 

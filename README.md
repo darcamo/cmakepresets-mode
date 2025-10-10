@@ -2,9 +2,9 @@
 
 A major mode for editing CMake presets files.
 
-`cmakepresets-mode` is built on top of `json-mode`, as CMake presets are JSON files. It enhances the editing experience by providing additional conveniences tailored specifically for CMake presets.
+`cmakepresets-mode` is built on top of `json-mode`, since CMake presets are JSON files. This mode only adds a few minor improvements to the editing experience by providing additional conveniences tailored specifically for CMake presets.
 
-Currently, the mode adds support for `imenu` to improve navigation within presets files.
+Currently, the mode adds support for `imenu` to improve navigation within the CMake presets files, and adds completions for some macro expansions, such as `${<cursor-here>}` or `$env{<cursor-here>}`.
 
 
 ## Configuration
